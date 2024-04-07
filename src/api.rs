@@ -1,8 +1,11 @@
-use std::{any::Any, collections::HashMap, sync::Arc};
+use core::num;
+use std::{collections::HashMap, sync::Arc};
 
 use axum::{extract::{Query, State}, http::StatusCode, routing::get, Json, Router};
 use serde::{Deserialize, Serialize};
-use crate::release::{Artifact, Release, ReleaseChannel, Repository};
+use crate::{db::ReleaseDatabase, release::{Artifact, Release, ReleaseChannel, Repository}};
+
+const DB_PATH: &'static str = "./releases.db3";
 
 pub struct Api {
     repository: Repository
@@ -29,6 +32,12 @@ impl Api {
         State(state): State<Arc<Api>>,
         Query(query): Query<HashMap<String, String>>,
     ) -> (StatusCode, Json<Response>) {
+        // Open database
+        let mut db = match ReleaseDatabase::new(DB_PATH) {
+            Ok(db) => db,
+            Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(Response { response_code: 100, data: ResponseData::Error(e.to_string()) }))
+        };
+
         let mut channel: Option<u32> = None;
         let mut release: Option<u32> = None;
         let mut artifact: Option<u32> = None;
@@ -54,59 +63,46 @@ impl Api {
             }
         }
 
-        // Check if we have artifact, we also have release and channel
+        let mut num_params: u32 = 0;
+        if channel.is_some() {
+            num_params += 1;
+        }
+        if release.is_some() {
+            num_params += 1;
+        }
         if artifact.is_some() {
-            if release.is_some() {
-                if channel.is_some() {
-                    // All good
-                } else {
-                    return (StatusCode::BAD_REQUEST, Json(Response { response_code: 3, data: ResponseData::None }))
-                }
-            } else {
-                return (StatusCode::BAD_REQUEST, Json(Response { response_code: 3, data: ResponseData::None }))
-            }
-        } else {
-            // Check if we have release, we also have channel
-            if release.is_some() {
-                if channel.is_some() {
-                    // All good
-                } else {
-                    return (StatusCode::BAD_REQUEST, Json(Response { response_code: 3, data: ResponseData::None }))
-                }
-            }
+            num_params += 1;
+        }
+
+        if num_params > 1 {
+            return (StatusCode::BAD_REQUEST, Json(Response { response_code: 4, data: ResponseData::None }))
         }
 
         if let Some(channel) = channel {
-            for c in state.repository.channels() {
-                if c.id() == channel {
-                    if let Some(release) = release {
-                        for r in c.releases() {
-                            if r.id() == release {
-                                if let Some(artifact) = artifact {
-                                    for a in r.artifacts() {
-                                        if a.id() == artifact {
-                                            let artifact = a.clone();
-                                            return (StatusCode::OK, Json(Response { response_code: 0, data: ResponseData::Artifact(artifact) }))
-                                        }
-                                    }
-                                } else {
-                                    let release = r.clone();
-                                    return (StatusCode::OK, Json(Response { response_code: 0, data: ResponseData::Release(release) }))
-                                }
-                            }
-                        }
-                    } else {
-                        let release_channel = c.clone();
-                        return (StatusCode::OK, Json(Response { response_code: 0, data: ResponseData::ReleaseChannel(release_channel)}))
-                    }
-                }
+            if let Ok(channel) = db.read_channel(channel) {
+                return (StatusCode::OK, Json(Response { response_code: 0, data: ResponseData::ReleaseChannel(channel) }))
+            } else {
+                return (StatusCode::BAD_REQUEST, Json(Response { response_code: 4, data: ResponseData::None }))
+            }
+        } else if let Some(release) = release {
+            if let Ok(release) = db.read_release(release) {
+                return (StatusCode::OK, Json(Response { response_code: 0, data: ResponseData::Release(release) }))
+            } else {
+                return (StatusCode::BAD_REQUEST, Json(Response { response_code: 4, data: ResponseData::None }))
+            }
+        } else if let Some(artifact) = artifact {
+            if let Ok(artifact) = db.read_artifact(artifact) {
+                return (StatusCode::OK, Json(Response { response_code: 0, data: ResponseData::Artifact(artifact) }))
+            } else {
+                return (StatusCode::BAD_REQUEST, Json(Response { response_code: 4, data: ResponseData::None }))
             }
         } else {
-            let repository = state.repository.clone();
-            return (StatusCode::OK, Json(Response { response_code: 0, data: ResponseData::Repository(repository) }))
+            if let Ok(repository) = db.read_repository() {
+                return (StatusCode::OK, Json(Response { response_code: 0, data: ResponseData::Repository(repository) }))
+            } else {
+                return (StatusCode::BAD_REQUEST, Json(Response { response_code: 4, data: ResponseData::None }))
+            }
         }
-
-        return (StatusCode::BAD_REQUEST, Json(Response { response_code: 4, data: ResponseData::None }))
     }
 }
 
@@ -120,6 +116,7 @@ struct Response {
 #[serde(untagged)]
 enum ResponseData {
     None,
+    Error(String),
     Repository(Repository),
     ReleaseChannel(ReleaseChannel),
     Release(Release),

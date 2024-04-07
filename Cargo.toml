@@ -8,6 +8,9 @@ edition = "2021"
 [dependencies]
 axum = "0.7.5"
 lazy_static = "1.4.0"
+log = "0.4.21"
+rusqlite = "0.31.0"
 serde = { version = "1.0.197", features = ["derive"] }
+simple_logger = "4.3.3"
 tokio = { version = "1.37.0", features = ["full"] }
 tower = "0.4.13"

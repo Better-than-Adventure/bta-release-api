@@ -8,6 +8,12 @@ pub struct Repository {
 }
 
 impl Repository {
+    pub fn new(channels: Vec<ReleaseChannel>) -> Self {
+        Self {
+            channels
+        }
+    }
+
     pub fn channels(&self) -> &Vec<ReleaseChannel> {
         &self.channels
     }
@@ -133,6 +139,14 @@ pub struct ReleaseChannel {
 }
 
 impl ReleaseChannel {
+    pub fn new<S: Into<String>>(id: Id, name: S, releases: Vec<Release>) -> Self {
+        Self {
+            id,
+            name: name.into(),
+            releases
+        }
+    }
+
     pub fn id(&self) -> Id {
         self.id
     }
@@ -155,6 +169,15 @@ pub struct Release {
 }
 
 impl Release {
+    pub fn new<S: Into<String>>(id: Id, name: S, created_at: u64, artifacts: Vec<Artifact>) -> Self {
+        Self {
+            id,
+            name: name.into(),
+            created_at,
+            artifacts
+        }
+    }
+
     pub fn id(&self) -> Id {
         self.id
     }
@@ -181,6 +204,15 @@ pub struct Artifact {
 }
 
 impl Artifact {
+    pub fn new<S: Into<String>>(id: Id, name: S, path: S, artifact_type: ArtifactType) -> Self {
+        Self {
+            id,
+            name: name.into(),
+            path: path.into(),
+            artifact_type
+        }
+    }
+
     pub fn id(&self) -> Id {
         self.id
     }
@@ -204,4 +236,29 @@ pub enum ArtifactType {
     ServerJar,
     Manifest,
     MmcInstance
+}
+
+impl Into<u32> for ArtifactType {
+    fn into(self) -> u32 {
+        match self {
+            Self::ClientJar => 0,
+            Self::ServerJar => 1,
+            Self::Manifest => 2,
+            Self::MmcInstance => 3
+        }
+    }
+}
+
+impl TryFrom<u32> for ArtifactType {
+    type Error = ();
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::ClientJar),
+            1 => Ok(Self::ServerJar),
+            2 => Ok(Self::Manifest),
+            3 => Ok(Self::MmcInstance),
+            _ => Err(())
+        }
+    }
 }
