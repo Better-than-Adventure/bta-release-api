@@ -4,7 +4,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use axum::{extract::{Path, Query, State}, http::StatusCode, routing::get, Json, Router};
 use serde::{Deserialize, Serialize};
-use crate::{db::ReleaseDatabase, release::{Artifact, Release, ReleaseChannel, Repository}};
+use crate::{db::ReleaseDatabase, release::{Artifact, Release, Channel, Repository}};
 
 const DB_PATH: &'static str = "./releases.db3";
 
@@ -47,7 +47,7 @@ impl Api {
 
     async fn repositories_channels(
         State(state): State<Arc<Api>>,
-        Path((repository, channel)): Path<(String, u32)>
+        Path((repository, channel)): Path<(String, String)>
     ) -> (StatusCode, Json<Response>) {
         let db = match ReleaseDatabase::new(DB_PATH) {
             Ok(db) => db,
@@ -55,14 +55,14 @@ impl Api {
         };
 
         match db.read_channel(repository, channel) {
-            Ok(channel) => (StatusCode::OK, Json(Response { response_code: 0, data: ResponseData::ReleaseChannel(channel) })),
+            Ok(channel) => (StatusCode::OK, Json(Response { response_code: 0, data: ResponseData::Channel(channel) })),
             Err(e) => (StatusCode::BAD_REQUEST, Json(Response { response_code: 4, data: ResponseData::Error(e.to_string()) }))
         }
     }
 
     async fn repositories_channels_releases(
         State(state): State<Arc<Api>>,
-        Path((repository, channel, release)): Path<(String, u32, u32)>
+        Path((repository, channel, release)): Path<(String, String, u32)>
     ) -> (StatusCode, Json<Response>) {
         let db = match ReleaseDatabase::new(DB_PATH) {
             Ok(db) => db,
@@ -76,7 +76,7 @@ impl Api {
 
     async fn repositories_channels_releases_artifacts(
         State(state): State<Arc<Api>>,
-        Path((repository, channel, release, artifact)): Path<(String, u32, u32, u32)>
+        Path((repository, channel, release, artifact)): Path<(String, String, u32, u32)>
     ) -> (StatusCode, Json<Response>) {
         let db = match ReleaseDatabase::new(DB_PATH) {
             Ok(db) => db,
@@ -102,7 +102,7 @@ enum ResponseData {
     None,
     Error(String),
     Repository(Repository),
-    ReleaseChannel(ReleaseChannel),
+    Channel(Channel),
     Release(Release),
     Artifact(Artifact)
 }

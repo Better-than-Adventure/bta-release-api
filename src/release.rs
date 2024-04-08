@@ -19,11 +19,11 @@ pub struct Repository {
     #[serde(rename = "type")]
     _type: Type,
     id: String,
-    channels: Vec<ReleaseChannel>
+    channels: Vec<Channel>
 }
 
 impl Repository {
-    pub fn new(id: String, channels: Vec<ReleaseChannel>) -> Self {
+    pub fn new(id: String, channels: Vec<Channel>) -> Self {
         Self {
             _type: Type::Repository,
             id,
@@ -31,36 +31,30 @@ impl Repository {
         }
     }
 
-    pub fn channels(&self) -> &Vec<ReleaseChannel> {
+    pub fn channels(&self) -> &Vec<Channel> {
         &self.channels
     }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct ReleaseChannel {
+pub struct Channel {
     #[serde(rename = "type")]
     _type: Type,
-    id: Id,
-    name: String,
+    id: String,
     releases: Vec<Release>
 }
 
-impl ReleaseChannel {
-    pub fn new<S: Into<String>>(id: Id, name: S, releases: Vec<Release>) -> Self {
+impl Channel {
+    pub fn new<S: Into<String>>(id: S, releases: Vec<Release>) -> Self {
         Self {
             _type: Type::Channel,
-            id,
-            name: name.into(),
+            id: id.into(),
             releases
         }
     }
 
-    pub fn id(&self) -> Id {
-        self.id
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
+    pub fn id(&self) -> &str {
+        &self.id
     }
 
     pub fn releases(&self) -> &Vec<Release> {

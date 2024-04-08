@@ -3,7 +3,7 @@ use std::{error::Error, fmt::Display, path::Path};
 use log::warn;
 use rusqlite::Connection;
 
-use crate::release::{Artifact, ArtifactType, Release, ReleaseChannel, Repository};
+use crate::release::{Artifact, ArtifactType, Release, Channel, Repository};
 
 type Result<T> = core::result::Result<T, Box<dyn Error>>;
 
@@ -53,27 +53,27 @@ impl ReleaseDatabase {
         )?;
         connection.execute(
             "CREATE TABLE IF NOT EXISTS channel (
-                id          INTEGER NOT NULL,
+                id          TEXT NOT NULL,
                 repository  TEXT NOT NULL,
-                name        TEXT NOT NULL,
                 CONSTRAINT key PRIMARY KEY (id, repository),
                 FOREIGN KEY(repository) REFERENCES repository(id)
             )",
             ()
         )?;
         connection.execute(
-            "INSERT OR IGNORE INTO channel(id, repository, name)
+            "INSERT OR IGNORE INTO channel(id, repository)
             VALUES
-                (0, \"mod\", \"stable\"),
-                (1, \"mod\", \"snapshot\"),
-                (2, \"mod\", \"nightly\"),
-                (0, \"updater\", \"release\")",
+                (\"stable\", \"mod\"),
+                (\"snapshot\", \"mod\"),
+                (\"nightly\", \"mod\"),
+                (\"release\", \"updater\")",
                 ()
         )?;
         connection.execute(
             "CREATE TABLE IF NOT EXISTS release (
                 id          INTEGER NOT NULL,
-                channel     INTEGER NOT NULL,
+                repository  TEXT NOT NULL,
+                channel     TEXT NOT NULL,
                 name        TEXT NOT NULL,
                 created_at  INTEGER NOT NULL,
                 CONSTRAINT key PRIMARY KEY (id, channel),
@@ -83,11 +83,13 @@ impl ReleaseDatabase {
         )?;
         connection.execute(
             "CREATE TABLE IF NOT EXISTS artifact (
-                id      INTEGER NOT NULL,
-                release INTEGER NOT NULL,
-                name    TEXT NOT NULL,
-                path    TEXT NOT NULL,
-                type    INTEGER NOT NULL,
+                id          INTEGER NOT NULL,
+                repository  TEXT NOT NULL,
+                channel     TEXT NOT NULL,
+                release     INTEGER NOT NULL,
+                name        TEXT NOT NULL,
+                path        TEXT NOT NULL,
+                type        INTEGER NOT NULL,
                 CONSTRAINT key PRIMARY KEY (id, release),
                 FOREIGN KEY(release) REFERENCES release(id)
             )",
@@ -97,14 +99,14 @@ impl ReleaseDatabase {
         Ok(())
     }
 
-    pub fn read_artifact(&self, repository_id: String, channel_id: u32, release_id: u32, artifact_id: u32) -> Result<Artifact> {
+    pub fn read_artifact(&self, repository_id: String, channel_id: String, release_id: u32, artifact_id: u32) -> Result<Artifact> {
         let mut statement = self.connection.prepare(
             format!(
                 "SELECT art.id, art.name, art.path, art.type
                 FROM artifact AS art
                 INNER JOIN release AS rel ON rel.id=art.release
-                INNER JOIN channel AS cha ON cha.id=rel.channel
-                INNER JOIN repository AS rep ON rep.id=cha.repository
+                INNER JOIN channel AS cha ON cha.id=art.channel
+                INNER JOIN repository AS rep ON rep.id=art.repository
                 WHERE art.id={artifact_id}").as_str()
         )?;
 
@@ -123,13 +125,13 @@ impl ReleaseDatabase {
         }
     }
 
-    pub fn read_release(&self, repository_id: String, channel_id: u32, release_id: u32) -> Result<Release> {
+    pub fn read_release(&self, repository_id: String, channel_id: String, release_id: u32) -> Result<Release> {
         let mut statement = self.connection.prepare(
             format!(
                 "SELECT rel.id, rel.name, rel.created_at
                 FROM release AS rel
                 INNER JOIN channel AS cha ON cha.id=rel.channel
-                INNER JOIN repository AS rep ON rep.id=cha.repository
+                INNER JOIN repository AS rep ON rep.id=rel.repository
                 WHERE rel.id={release_id}").as_str()
         )?;
 
@@ -158,7 +160,7 @@ impl ReleaseDatabase {
 
         let artifacts: std::result::Result<Vec<_>, _> = artifact_ids
             .into_iter()
-            .map(|id| self.read_artifact(repository_id.to_string(), channel_id, release_id, id))
+            .map(|id| self.read_artifact(repository_id.to_string(), channel_id.to_string(), release_id, id))
             .collect();
         let artifacts = match artifacts {
             Ok(artifacts) => artifacts,
@@ -174,24 +176,23 @@ impl ReleaseDatabase {
         }
     }
 
-    pub fn read_channel(&self, repository_id: String, channel_id: u32) -> Result<ReleaseChannel> {
+    pub fn read_channel(&self, repository_id: String, channel_id: String) -> Result<Channel> {
         let mut statement = self.connection.prepare(
             format!(
-                "SELECT cha.id, cha.name 
+                "SELECT cha.id 
                 FROM channel AS cha
                 INNER JOIN repository AS rep ON rep.id=cha.repository
-                WHERE cha.id={channel_id}").as_str()
+                WHERE cha.id=\"{channel_id}\"").as_str()
         )?;
 
         let db_channel = statement.query_row([], |row| {
             Ok(DbChannel {
-                id: row.get(0)?,
-                name: row.get(1)?
+                id: row.get(0)?
             })
         })?;
 
         let mut release_statement = self.connection.prepare(
-            format!("SELECT id FROM release WHERE channel={channel_id}").as_str()
+            format!("SELECT id FROM release WHERE channel=\"{channel_id}\"").as_str()
         )?;
 
         let release_ids: std::result::Result<Vec<_>, _> = release_statement
@@ -200,19 +201,19 @@ impl ReleaseDatabase {
         let release_ids = match release_ids {
             Ok(release_ids) => release_ids,
             Err(_) => {
-                warn!(target: "read_db", "channel with id {channel_id} has release with invalid id");
+                warn!(target: "read_db", "channel with id \"{channel_id}\" has release with invalid id");
                 return Err(Box::new(DbError::ParseErr));
             }
         };
 
         let releases: std::result::Result<Vec<_>, _> = release_ids
             .into_iter()
-            .map(|id| self.read_release(repository_id.to_string(), channel_id, id))
+            .map(|id| self.read_release(repository_id.to_string(), channel_id.to_string(), id))
             .collect();
         let releases = match releases {
             Ok(releases) => releases,
             Err(_) => {
-                warn!(target: "read_db", "channel with id {channel_id} has broken release");
+                warn!(target: "read_db", "channel with id \"{channel_id}\" has broken release");
                 return Err(Box::new(DbError::ParseErr));
             }
         };
@@ -239,7 +240,7 @@ impl ReleaseDatabase {
         )?;
 
         let channel_ids: std::result::Result<Vec<_>, _> = channel_statement
-            .query_map([], |row| row.get::<usize, u32>(0))?
+            .query_map([], |row| row.get::<usize, String>(0))?
             .collect();
         let channel_ids = match channel_ids {
             Ok(channel_ids) => channel_ids,
@@ -273,19 +274,18 @@ struct DbRepository {
 }
 
 impl DbRepository {
-    fn try_into_repository(self, channels: Vec<ReleaseChannel>) -> std::result::Result<Repository, ()> {
+    fn try_into_repository(self, channels: Vec<Channel>) -> std::result::Result<Repository, ()> {
         Ok(Repository::new(self.id, channels))
     }
 }
 
 struct DbChannel {
-    id: u32,
-    name: String
+    id: String
 }
 
 impl DbChannel {
-    fn try_into_channel(self, releases: Vec<Release>) -> std::result::Result<ReleaseChannel, ()> {
-        Ok(ReleaseChannel::new(self.id, self.name, releases))
+    fn try_into_channel(self, releases: Vec<Release>) -> std::result::Result<Channel, ()> {
+        Ok(Channel::new(self.id, releases))
     }
 }
 
