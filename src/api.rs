@@ -1,4 +1,5 @@
 
+use core::num;
 use std::{collections::HashMap, sync::Arc};
 
 use axum::{extract::{Query, State}, http::StatusCode, routing::get, Json, Router};
@@ -28,7 +29,7 @@ impl Api {
 
     async fn api(
         State(state): State<Arc<Api>>,
-        Query(query): Query<HashMap<String, String>>,
+        Query(query): Query<HashMap<String, String>>
     ) -> (StatusCode, Json<Response>) {
         // Open database
         let db = match ReleaseDatabase::new(DB_PATH) {
@@ -36,12 +37,14 @@ impl Api {
             Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(Response { response_code: 100, data: ResponseData::Error(e.to_string()) }))
         };
 
+        let mut repository: Option<String> = None;
         let mut channel: Option<u32> = None;
         let mut release: Option<u32> = None;
         let mut artifact: Option<u32> = None;
 
         for param in query {
             match param.0.as_str() {
+                "repository" => repository = Some(param.1),
                 "channel" => if let Ok(result) = param.1.parse::<u32>() {
                     channel = Some(result);
                 } else {
@@ -62,6 +65,9 @@ impl Api {
         }
 
         let mut num_params: u32 = 0;
+        if repository.is_some() {
+            num_params += 1;
+        }
         if channel.is_some() {
             num_params += 1;
         }
@@ -76,39 +82,28 @@ impl Api {
             return (StatusCode::BAD_REQUEST, Json(Response { response_code: 4, data: ResponseData::None }))
         }
 
-        if let Some(channel) = channel {
-            if let Ok(channel) = db.read_channel(channel) {
-                return (StatusCode::OK, Json(Response { response_code: 0, data: ResponseData::ReleaseChannel(channel) }))
-            } else {
-                return (StatusCode::BAD_REQUEST, Json(Response { response_code: 4, data: ResponseData::None }))
+        if let Some(repository) = repository {
+            match db.read_repository(repository) {
+                Ok(repository) => return (StatusCode::OK, Json(Response { response_code: 0, data: ResponseData::Repository(repository) })),
+                Err(e) => return (StatusCode::BAD_REQUEST, Json(Response { response_code: 4, data: ResponseData::Error(e.to_string()) }))
+            }
+        } else if let Some(channel) = channel {
+            match db.read_channel(channel) {
+                Ok(channel) => return (StatusCode::OK, Json(Response { response_code: 0, data: ResponseData::ReleaseChannel(channel) })),
+                Err(e) => return (StatusCode::BAD_REQUEST, Json(Response { response_code: 4, data: ResponseData::Error(e.to_string()) }))
             }
         } else if let Some(release) = release {
-            if let Ok(release) = db.read_release(release) {
-                return (StatusCode::OK, Json(Response { response_code: 0, data: ResponseData::Release(release) }))
-            } else {
-                return (StatusCode::BAD_REQUEST, Json(Response { response_code: 4, data: ResponseData::None }))
+            match db.read_release(release) {
+                Ok(release) => return (StatusCode::OK, Json(Response { response_code: 0, data: ResponseData::Release(release) })),
+                Err(e) => return (StatusCode::BAD_REQUEST, Json(Response { response_code: 4, data: ResponseData::Error(e.to_string()) }))
             }
         } else if let Some(artifact) = artifact {
-            if let Ok(artifact) = db.read_artifact(artifact) {
-                return (StatusCode::OK, Json(Response { response_code: 0, data: ResponseData::Artifact(artifact) }))
-            } else {
-                return (StatusCode::BAD_REQUEST, Json(Response { response_code: 4, data: ResponseData::None }))
-            }
-        } else {
-            if let Ok(repository) = db.read_repository() {
-                return (StatusCode::OK, Json(Response { response_code: 0, data: ResponseData::Repository(repository) }))
-            } else {
-                return (StatusCode::BAD_REQUEST, Json(Response { response_code: 4, data: ResponseData::None }))
+            match db.read_artifact(artifact) {
+                Ok(artifact) => return (StatusCode::OK, Json(Response { response_code: 0, data: ResponseData::Artifact(artifact) })),
+                Err(e) => return (StatusCode::BAD_REQUEST, Json(Response { response_code: 4, data: ResponseData::Error(e.to_string()) }))
             }
         }
-    }
-
-    async fn api_create(
-        State(state): State<Arc<Api>>,
-        Query(query): Query<HashMap<String, String>>,
-    ) -> (StatusCode, Json<Response>) {
-        
-        todo!()
+        return (StatusCode::BAD_REQUEST, Json(Response { response_code: 4, data: ResponseData::None }))
     }
 }
 

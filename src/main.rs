@@ -1,4 +1,5 @@
 use api::Api;
+use log::warn;
 use simple_logger::SimpleLogger;
 
 mod api;
@@ -7,7 +8,7 @@ mod db;
 
 #[tokio::main]
 async fn main() {
-    SimpleLogger::new().init().unwrap();
+    SimpleLogger::new().with_level(log::LevelFilter::Debug).init().unwrap();
 
     let api = Api::new();
     api.run().await;

@@ -39,11 +39,35 @@ impl ReleaseDatabase {
 
     fn init_db(connection: &Connection) -> Result<()> {
         connection.execute(
-            "CREATE TABLE IF NOT EXISTS channel (
-                id      INTEGER PRIMARY KEY,
-                name    TEXT NOT NULL
+            "CREATE TABLE IF NOT EXISTS repository (
+                id      TEXT PRIMARY KEY
             )",
             ()
+        )?;
+        connection.execute(
+            "INSERT OR IGNORE INTO repository(id)
+            VALUES
+                (\"mod\"),
+                (\"updater\")",
+            ()
+        )?;
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS channel (
+                id          INTEGER PRIMARY KEY,
+                repository  TEXT NOT NULL,
+                name        TEXT NOT NULL,
+                FOREIGN KEY(repository) REFERENCES repository(id)
+            )",
+            ()
+        )?;
+        connection.execute(
+            "INSERT OR IGNORE INTO channel(id, repository, name)
+            VALUES
+                (0, \"mod\", \"stable\"),
+                (1, \"mod\", \"snapshot\"),
+                (2, \"mod\", \"nightly\"),
+                (3, \"updater\", \"release\")",
+                ()
         )?;
         connection.execute(
             "CREATE TABLE IF NOT EXISTS release (
@@ -140,13 +164,14 @@ impl ReleaseDatabase {
 
     pub fn read_channel(&self, id: u32) -> Result<ReleaseChannel> {
         let mut statement = self.connection.prepare(
-            format!("SELECT id, name FROM channel WHERE id={id}").as_str()
+            format!("SELECT id, repository, name FROM channel WHERE id={id}").as_str()
         )?;
 
         let db_channel = statement.query_row([], |row| {
             Ok(DbChannel {
                 id: row.get(0)?,
-                name: row.get(1)?
+                repository: row.get(1)?,
+                name: row.get(2)?
             })
         })?;
 
@@ -183,18 +208,28 @@ impl ReleaseDatabase {
         }
     }
 
-    pub fn read_repository(&self) -> Result<Repository> {
+    pub fn read_repository(&self, id: String) -> Result<Repository> {
         let mut statement = self.connection.prepare(
-            format!("select id FROM channel").as_str()
+            format!("SELECT id FROM repository WHERE id=\"{id}\"").as_str()
         )?;
 
-        let channel_ids: std::result::Result<Vec<_>, _> = statement
+        let db_repository = statement.query_row([], |row| {
+            Ok(DbRepository {
+                id: row.get(0)?
+            })
+        })?;
+
+        let mut channel_statement = self.connection.prepare(
+            format!("select id FROM channel WHERE repository=\"{id}\"").as_str()
+        )?;
+
+        let channel_ids: std::result::Result<Vec<_>, _> = channel_statement
             .query_map([], |row| row.get::<usize, u32>(0))?
             .collect();
         let channel_ids = match channel_ids {
             Ok(channel_ids) => channel_ids,
             Err(_) => {
-                warn!(target: "read_db", "repository has channel with invalid id");
+                warn!(target: "read_db", "repository with id \"{id}\" has channel with invalid id");
                 return Err(Box::new(DbError::ParseErr));
             }
         };
@@ -206,17 +241,31 @@ impl ReleaseDatabase {
         let channels = match channels {
             Ok(channels) => channels,
             Err(_) => {
-                warn!(target: "read_db", "repository has broken channel");
+                warn!(target: "read_db", "repository with id \"{id}\" has broken channel");
                 return Err(Box::new(DbError::ParseErr));
             }
         };
 
-        Ok(Repository::new(channels))
+        match db_repository.try_into_repository(channels) {
+            Ok(repository) => Ok(repository),
+            Err(_) => Err(Box::new(DbError::ParseErr))
+        }
+    }
+}
+
+struct DbRepository {
+    id: String
+}
+
+impl DbRepository {
+    fn try_into_repository(self, channels: Vec<ReleaseChannel>) -> std::result::Result<Repository, ()> {
+        Ok(Repository::new(self.id, channels))
     }
 }
 
 struct DbChannel {
     id: u32,
+    repository: String,
     name: String
 }
 

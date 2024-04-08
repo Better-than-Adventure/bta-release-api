@@ -2,14 +2,31 @@ use serde::{Deserialize, Serialize};
 
 type Id = u32;
 
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq)]
+pub enum Type {
+    #[serde(rename = "repository")]
+    Repository,
+    #[serde(rename = "channel")]
+    Channel,
+    #[serde(rename = "release")]
+    Release,
+    #[serde(rename = "artifact")]
+    Artifact
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Repository {
+    #[serde(rename = "type")]
+    _type: Type,
+    id: String,
     channels: Vec<ReleaseChannel>
 }
 
 impl Repository {
-    pub fn new(channels: Vec<ReleaseChannel>) -> Self {
+    pub fn new(id: String, channels: Vec<ReleaseChannel>) -> Self {
         Self {
+            _type: Type::Repository,
+            id,
             channels
         }
     }
@@ -17,122 +34,12 @@ impl Repository {
     pub fn channels(&self) -> &Vec<ReleaseChannel> {
         &self.channels
     }
-
-    pub fn dummy() -> Repository {
-        let vec = vec![
-            ReleaseChannel {
-                id: 0,
-                name: "stable".into(),
-                releases: vec![
-                    Release {
-                        id: 0,
-                        name: "7.1".into(),
-                        created_at: 0u64,
-                        artifacts: vec![
-                            Artifact {
-                                id: 0,
-                                name: "Client JAR".into(),
-                                path: "/downloads/stable/7.1/client.jar".into(),
-                                artifact_type: ArtifactType::ClientJar
-                            },
-                            Artifact {
-                                id: 1,
-                                name: "Server JAR".into(),
-                                path: "/downloads/stable/7.1/server.jar".into(),
-                                artifact_type: ArtifactType::ServerJar
-                            },
-                            Artifact {
-                                id: 2,
-                                name: "MultiMC Instance".into(),
-                                path: "/downloads/stable/7.1/mmc.zip".into(),
-                                artifact_type: ArtifactType::MmcInstance
-                            },
-                            Artifact {
-                                id: 3,
-                                name: "Manifest".into(),
-                                path: "/downloads/stable/7.1/manifest.json".into(),
-                                artifact_type: ArtifactType::Manifest
-                            }
-                        ]
-                    }
-                ]
-            },
-            ReleaseChannel {
-                id: 1,
-                name: "snapshot".into(),
-                releases: vec![
-                    Release {
-                        id: 0,
-                        name: "7.1 Prerelease 2a".into(),
-                        created_at: 0u64,
-                        artifacts: vec![
-                            Artifact {
-                                id: 0,
-                                name: "Client JAR".into(),
-                                path: "/downloads/snapshot/7.1pre2a/client.jar".into(),
-                                artifact_type: ArtifactType::ClientJar
-                            },
-                            Artifact {
-                                id: 1,
-                                name: "Server JAR".into(),
-                                path: "/downloads/snapshot/7.1pre2a/server.jar".into(),
-                                artifact_type: ArtifactType::ServerJar
-                            },
-                            Artifact {
-                                id: 2,
-                                name: "MultiMC Instance".into(),
-                                path: "/downloads/snapshot/7.1pre2a/mmc.zip".into(),
-                                artifact_type: ArtifactType::MmcInstance
-                            },
-                            Artifact {
-                                id: 3,
-                                name: "Manifest".into(),
-                                path: "/downloads/snapshot/7.1pre2a/manifest.json".into(),
-                                artifact_type: ArtifactType::Manifest
-                            }
-                        ]
-                    }
-                ]
-            },
-            ReleaseChannel {
-                id: 2,
-                name: "nightly".into(),
-                releases: vec![
-                    Release {
-                        id: 0,
-                        name: "Nightly 2024-04-06".into(),
-                        created_at: 0u64,
-                        artifacts: vec![
-                            Artifact {
-                                id: 0,
-                                name: "Client JAR".into(),
-                                path: "/downloads/nightly/20240406/client.jar".into(),
-                                artifact_type: ArtifactType::ClientJar
-                            },
-                            Artifact {
-                                id: 1,
-                                name: "Server JAR".into(),
-                                path: "/downloads/nightly/20240406/server.jar".into(),
-                                artifact_type: ArtifactType::ServerJar
-                            },
-                            Artifact {
-                                id: 2,
-                                name: "Manifest".into(),
-                                path: "/downloads/nightly/20240406/manifest.json".into(),
-                                artifact_type: ArtifactType::Manifest
-                            }
-                        ]
-                    }
-                ]
-            }
-        ];
-        Self { channels: vec }
-    }
-
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ReleaseChannel {
+    #[serde(rename = "type")]
+    _type: Type,
     id: Id,
     name: String,
     releases: Vec<Release>
@@ -141,6 +48,7 @@ pub struct ReleaseChannel {
 impl ReleaseChannel {
     pub fn new<S: Into<String>>(id: Id, name: S, releases: Vec<Release>) -> Self {
         Self {
+            _type: Type::Channel,
             id,
             name: name.into(),
             releases
@@ -162,6 +70,8 @@ impl ReleaseChannel {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Release {
+    #[serde(rename = "type")]
+    _type: Type,
     id: Id,
     name: String,
     created_at: u64,
@@ -171,6 +81,7 @@ pub struct Release {
 impl Release {
     pub fn new<S: Into<String>>(id: Id, name: S, created_at: u64, artifacts: Vec<Artifact>) -> Self {
         Self {
+            _type: Type::Release,
             id,
             name: name.into(),
             created_at,
@@ -197,6 +108,8 @@ impl Release {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Artifact {
+    #[serde(rename = "type")]
+    _type: Type,
     id: Id,
     name: String,
     path: String,
@@ -206,6 +119,7 @@ pub struct Artifact {
 impl Artifact {
     pub fn new<S: Into<String>>(id: Id, name: S, path: S, artifact_type: ArtifactType) -> Self {
         Self {
+            _type: Type::Artifact,
             id,
             name: name.into(),
             path: path.into(),
