@@ -1,4 +1,4 @@
-use core::num;
+
 use std::{collections::HashMap, sync::Arc};
 
 use axum::{extract::{Query, State}, http::StatusCode, routing::get, Json, Router};
@@ -8,13 +8,11 @@ use crate::{db::ReleaseDatabase, release::{Artifact, Release, ReleaseChannel, Re
 const DB_PATH: &'static str = "./releases.db3";
 
 pub struct Api {
-    repository: Repository
 }
 
 impl Api {
     pub fn new() -> Api {
         Self {
-            repository: Repository::dummy()
         }
     }
 
@@ -33,7 +31,7 @@ impl Api {
         Query(query): Query<HashMap<String, String>>,
     ) -> (StatusCode, Json<Response>) {
         // Open database
-        let mut db = match ReleaseDatabase::new(DB_PATH) {
+        let db = match ReleaseDatabase::new(DB_PATH) {
             Ok(db) => db,
             Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(Response { response_code: 100, data: ResponseData::Error(e.to_string()) }))
         };
@@ -103,6 +101,14 @@ impl Api {
                 return (StatusCode::BAD_REQUEST, Json(Response { response_code: 4, data: ResponseData::None }))
             }
         }
+    }
+
+    async fn api_create(
+        State(state): State<Arc<Api>>,
+        Query(query): Query<HashMap<String, String>>,
+    ) -> (StatusCode, Json<Response>) {
+        
+        todo!()
     }
 }
 
