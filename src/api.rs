@@ -1,32 +1,32 @@
 
-use core::num;
-use std::{collections::HashMap, sync::Arc};
 
-use axum::{extract::{Path, Query, State}, http::StatusCode, routing::get, Json, Router};
+use std::sync::Arc;
+
+use axum::{extract::{Path, State}, http::StatusCode, routing::get, Json, Router};
 use serde::{Deserialize, Serialize};
-use crate::{db::ReleaseDatabase, release::{Artifact, Release, Channel, Repository}};
-
-const DB_PATH: &'static str = "./releases.db3";
+use crate::{config::Config, db::ReleaseDatabase, release::{Artifact, Channel, Release, Repository}};
 
 pub struct Api {
+    config: Arc<Config>
 }
 
 impl Api {
-    pub fn new() -> Api {
+    pub fn new(config: Config) -> Api {
         Self {
+            config: Arc::new(config)
         }
     }
 
     pub async fn run(self) {
         let shared_state = Arc::new(self);
         let app = Router::new()
-            .route("/repositories/:repository", get(Self::repositories))
-            .route("/repositories/:repository/channels/:channel", get(Self::repositories_channels))
-            .route("/repositories/:repository/channels/:channel/releases/:release", get(Self::repositories_channels_releases))
-            .route("/repositories/:repository/channels/:channel/releases/:release/artifacts/:artifact", get(Self::repositories_channels_releases_artifacts))
-            .with_state(shared_state);
+            .route("/:repository", get(Self::repositories))
+            .route("/:repository/:channel", get(Self::repositories_channels))
+            .route("/:repository/:channel/:release", get(Self::repositories_channels_releases))
+            .route("/:repository/:channel/:release/:artifact", get(Self::repositories_channels_releases_artifacts))
+            .with_state(shared_state.clone());
 
-        let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+        let listener = tokio::net::TcpListener::bind(shared_state.config.bind_addr()).await.unwrap();
         axum::serve(listener, app).await.unwrap();
     }
 
@@ -34,7 +34,7 @@ impl Api {
         State(state): State<Arc<Api>>,
         Path(repository): Path<String>
     ) -> (StatusCode, Json<Response>) {
-        let db = match ReleaseDatabase::new(DB_PATH) {
+        let db = match ReleaseDatabase::new(state.config.db_path()) {
             Ok(db) => db,
             Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(Response { response_code: 100, data: ResponseData::Error(e.to_string()) }))
         };
@@ -49,7 +49,7 @@ impl Api {
         State(state): State<Arc<Api>>,
         Path((repository, channel)): Path<(String, String)>
     ) -> (StatusCode, Json<Response>) {
-        let db = match ReleaseDatabase::new(DB_PATH) {
+        let db = match ReleaseDatabase::new(state.config.db_path()) {
             Ok(db) => db,
             Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(Response { response_code: 100, data: ResponseData::Error(e.to_string()) }))
         };
@@ -64,7 +64,7 @@ impl Api {
         State(state): State<Arc<Api>>,
         Path((repository, channel, release)): Path<(String, String, u32)>
     ) -> (StatusCode, Json<Response>) {
-        let db = match ReleaseDatabase::new(DB_PATH) {
+        let db = match ReleaseDatabase::new(state.config.db_path()) {
             Ok(db) => db,
             Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(Response { response_code: 100, data: ResponseData::Error(e.to_string()) }))
         };
@@ -78,7 +78,7 @@ impl Api {
         State(state): State<Arc<Api>>,
         Path((repository, channel, release, artifact)): Path<(String, String, u32, u32)>
     ) -> (StatusCode, Json<Response>) {
-        let db = match ReleaseDatabase::new(DB_PATH) {
+        let db = match ReleaseDatabase::new(state.config.db_path()) {
             Ok(db) => db,
             Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(Response { response_code: 100, data: ResponseData::Error(e.to_string()) }))
         };
