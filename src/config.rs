@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 pub struct Config {
     bind_addr: SocketAddr,
     db_path: PathBuf,
+    data_dir: PathBuf,
     log_level: String,
 }
 
@@ -14,6 +15,7 @@ impl Default for Config {
         Self { 
             bind_addr: ([0, 0, 0, 0], 3000).into(),
             db_path: shellexpand::full("./releases.db3").unwrap().to_string().into(),
+            data_dir: shellexpand::full("./data").unwrap().to_string().into(),
             log_level: "WARN".to_string()
         }
     }
@@ -48,6 +50,10 @@ impl Config {
 
     pub fn db_path(&self) -> &Path {
         &self.db_path
+    }
+
+    pub fn data_dir(&self) -> &Path {
+        &self.data_dir
     }
 
     pub fn log_level(&self) -> log::LevelFilter {

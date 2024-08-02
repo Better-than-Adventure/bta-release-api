@@ -1,7 +1,7 @@
 use std::{error::Error, fmt::Display, path::Path};
 
 use log::warn;
-use rusqlite::Connection;
+use rusqlite::{params, Connection};
 
 use crate::release::{Artifact, ArtifactType, Release, Channel, Repository};
 
@@ -240,15 +240,12 @@ struct DbRepository {
 impl DbRepository {
     fn read<S: Into<String>>(db: &ReleaseDatabase, repository_id: S) -> Result<DbRepository> {
         let mut statement = db.connection.prepare(
-            format!(
-                "SELECT id FROM repository
-                WHERE
-                    id=\"{}\"",
-                repository_id.into()
-            ).as_str()
+            "SELECT id FROM repository
+            WHERE
+                id=?1",
         )?;
 
-        let db_repository = statement.query_row([], |row| {
+        let db_repository = statement.query_row(params![repository_id.into()], |row| {
             Ok(DbRepository {
                 id: row.get(0)?
             })
@@ -269,18 +266,15 @@ struct DbChannel {
 impl DbChannel {
     fn read<S: Into<String>>(db: &ReleaseDatabase, repository_id: S, channel_id: S) -> Result<DbChannel> {
         let mut statement = db.connection.prepare(
-            format!(
-                "SELECT cha.id 
-                FROM channel AS cha
-                INNER JOIN repository AS rep ON rep.id=cha.repository
-                WHERE
-                    cha.id=\"{}\" AND
-                    cha.repository=\"{}\"",
-                channel_id.into(), repository_id.into()
-            ).as_str()
+            "SELECT cha.id 
+            FROM channel AS cha
+            INNER JOIN repository AS rep ON rep.id=cha.repository
+            WHERE
+                cha.id=?1 AND
+                cha.repository=?2",
         )?;
 
-        let db_channel = statement.query_row([], |row| {
+        let db_channel = statement.query_row(params![channel_id.into(), repository_id.into()], |row| {
             Ok(DbChannel {
                 id: row.get(0)?
             })
@@ -303,19 +297,17 @@ struct DbRelease {
 impl DbRelease {
     fn read<S: Into<String>>(db: &ReleaseDatabase, repository_id: S, channel_id: S, release_id: S) -> Result<DbRelease> {
         let mut statement = db.connection.prepare(
-            format!(
-                "SELECT rel.id, rel.name, rel.created_at
-                FROM release AS rel
-                INNER JOIN channel AS cha ON cha.id=rel.channel
-                INNER JOIN repository AS rep ON rep.id=rel.repository
-                WHERE
-                    rel.id=\"{}\" AND
-                    rel.repository=\"{}\" AND
-                    rel.channel=\"{}\"",
-            release_id.into(), repository_id.into(), channel_id.into()).as_str()
+            "SELECT rel.id, rel.name, rel.created_at
+            FROM release AS rel
+            INNER JOIN channel AS cha ON cha.id=rel.channel
+            INNER JOIN repository AS rep ON rep.id=rel.repository
+            WHERE
+                rel.id=?1 AND
+                rel.repository=?2 AND
+                rel.channel=?3"
         )?;
 
-        let db_release = statement.query_row([], |row| {
+        let db_release = statement.query_row(params![release_id.into(), repository_id.into(), channel_id.into()], |row| {
             Ok(DbRelease {
                 id: row.get(0)?,
                 name: row.get(1)?,
@@ -341,21 +333,19 @@ struct DbArtifact {
 impl DbArtifact {
     fn read<S: Into<String>>(db: &ReleaseDatabase, repository_id: S, channel_id: S, release_id: S, artifact_id: u32) -> Result<DbArtifact> {
         let mut statement = db.connection.prepare(
-            format!(
-                "SELECT art.id, art.name, art.path, art.type
-                FROM artifact AS art
-                INNER JOIN release AS rel ON rel.id=art.release
-                INNER JOIN channel AS cha ON cha.id=art.channel
-                INNER JOIN repository AS rep ON rep.id=art.repository
-                WHERE
-                    art.id={artifact_id} AND
-                    art.repository=\"{}\" AND
-                    art.channel=\"{}\" AND
-                    art.release=\"{}\"",
-            repository_id.into(), channel_id.into(), release_id.into()).as_str()
+            "SELECT art.id, art.name, art.path, art.type
+            FROM artifact AS art
+            INNER JOIN release AS rel ON rel.id=art.release
+            INNER JOIN channel AS cha ON cha.id=art.channel
+            INNER JOIN repository AS rep ON rep.id=art.repository
+            WHERE
+                art.id=?1 AND
+                art.repository=?2 AND
+                art.channel=?3 AND
+                art.release=?4"
         )?;
 
-        let db_artifact = statement.query_row([], |row| {
+        let db_artifact = statement.query_row(params![artifact_id, repository_id.into(), channel_id.into(), release_id.into()], |row| {
             Ok(DbArtifact {
                 id: row.get(0)?,
                 name: row.get(1)?,

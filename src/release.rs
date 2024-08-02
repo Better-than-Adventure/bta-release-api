@@ -5,18 +5,18 @@ type Id = u32;
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Repository {
     id: String,
-    channels: Vec<Channel>
+    channels: Vec<String>
 }
 
 impl Repository {
     pub fn new(id: String, channels: Vec<Channel>) -> Self {
         Self {
             id,
-            channels
+            channels: channels.iter().map(|c| c.id().to_string()).collect()
         }
     }
 
-    pub fn channels(&self) -> &Vec<Channel> {
+    pub fn channels(&self) -> &Vec<String> {
         &self.channels
     }
 }
@@ -24,14 +24,14 @@ impl Repository {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Channel {
     id: String,
-    releases: Vec<Release>
+    releases: Vec<String>
 }
 
 impl Channel {
     pub fn new<S: Into<String>>(id: S, releases: Vec<Release>) -> Self {
         Self {
             id: id.into(),
-            releases
+            releases: releases.iter().map(|r| r.id().to_string()).collect()
         }
     }
 
@@ -39,7 +39,7 @@ impl Channel {
         &self.id
     }
 
-    pub fn releases(&self) -> &Vec<Release> {
+    pub fn releases(&self) -> &Vec<String> {
         &self.releases
     }
 }
@@ -49,7 +49,7 @@ pub struct Release {
     id: String,
     name: String,
     created_at: u64,
-    artifacts: Vec<Artifact>
+    artifacts: Vec<String>
 }
 
 impl Release {
@@ -58,7 +58,7 @@ impl Release {
             id: id.into(),
             name: name.into(),
             created_at,
-            artifacts
+            artifacts: artifacts.iter().map(|a| a.id().to_string()).collect()
         }
     }
 
@@ -74,7 +74,7 @@ impl Release {
         &self.created_at
     }
 
-    pub fn artifacts(&self) -> &Vec<Artifact> {
+    pub fn artifacts(&self) -> &Vec<String> {
         &self.artifacts
     }
 }
