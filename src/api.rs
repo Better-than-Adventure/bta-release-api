@@ -1,12 +1,12 @@
 
 
-use std::{fs::File, io::Read, sync::Arc};
+use std::{any::Any, fs::File, io::Read, sync::Arc};
 
 use axum::{body::{self, Bytes}, extract::{Path, State}, http::{Response, StatusCode}, response::IntoResponse, routing::get, Json, Router};
 use log::warn;
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt;
-use crate::{config::Config, db::ReleaseDatabase, release::{Artifact, Channel, Release, Repository}};
+use crate::{config::Config, db::{DbError, ReleaseDatabase}, release::{Artifact, Channel, Release, Repository}};
 
 pub struct Api {
     config: Arc<Config>

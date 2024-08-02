@@ -107,7 +107,12 @@ impl ReleaseDatabase {
         let channel_id: String = channel_id.into();
         let release_id: String = release_id.into();
 
-        let db_artifact = DbArtifact::read(&self, &repository_id, &channel_id, &release_id, artifact_id)?;
+        let db_artifact = match DbArtifact::read(&self, &repository_id, &channel_id, &release_id, artifact_id) {
+            Ok(db_artifact) => db_artifact,
+            Err(_) => {
+                return Err(Box::new(DbError::NoSuchKey));
+            }
+        };
 
         match db_artifact.try_into_artifact() {
             Ok(artifact) => Ok(artifact),
@@ -120,14 +125,19 @@ impl ReleaseDatabase {
         let channel_id: String = channel_id.into();
         let release_id: String = release_id.into();
 
-        let db_release = DbRelease::read(&self, &repository_id, &channel_id, &release_id)?;
+        let db_release = match DbRelease::read(&self, &repository_id, &channel_id, &release_id) {
+            Ok(db_release) => db_release,
+            Err(_) => {
+                return Err(Box::new(DbError::NoSuchKey));
+            }
+        };
 
         let mut artifact_statement = self.connection.prepare(
-            format!("SELECT id FROM artifact WHERE release={release_id}").as_str()
+            "SELECT id FROM artifact WHERE release=?1"
         )?;
 
         let artifact_ids: std::result::Result<Vec<_>, _> = artifact_statement
-            .query_map([], |row| row.get::<usize, u32>(0))?
+            .query_map(params![release_id], |row| row.get::<usize, u32>(0))?
             .collect();
         let artifact_ids = match artifact_ids {
             Ok(artifact_ids) => artifact_ids,
@@ -159,14 +169,19 @@ impl ReleaseDatabase {
         let repository_id: String = repository_id.into();
         let channel_id: String = channel_id.into();
 
-        let db_channel = DbChannel::read(&self, &repository_id, &channel_id)?;
+        let db_channel = match DbChannel::read(&self, &repository_id, &channel_id) {
+            Ok(db_channel) => db_channel,
+            Err(_) => {
+                return Err(Box::new(DbError::NoSuchKey));
+            }
+        };
 
         let mut release_statement = self.connection.prepare(
-            format!("SELECT id FROM release WHERE channel=\"{channel_id}\"").as_str()
+            "SELECT id FROM release WHERE channel=?1"
         )?;
 
         let release_ids: std::result::Result<Vec<_>, _> = release_statement
-            .query_map([], |row| row.get::<usize, String>(0))?
+            .query_map(params![channel_id], |row| row.get::<usize, String>(0))?
             .collect();
         let release_ids = match release_ids {
             Ok(release_ids) => release_ids,
@@ -197,14 +212,19 @@ impl ReleaseDatabase {
     pub fn read_repository<S: Into<String>>(&self, repository_id: S) -> Result<Repository> {
         let repository_id: String = repository_id.into();
 
-        let db_repository = DbRepository::read(&self, &repository_id)?;
+        let db_repository = match DbRepository::read(&self, &repository_id) {
+            Ok(db_repository) => db_repository,
+            Err(_) => {
+                return Err(Box::new(DbError::NoSuchKey));
+            }
+        };
 
         let mut channel_statement = self.connection.prepare(
-            format!("select id FROM channel WHERE repository=\"{repository_id}\"").as_str()
+            "select id FROM channel WHERE repository=?1"
         )?;
 
         let channel_ids: std::result::Result<Vec<_>, _> = channel_statement
-            .query_map([], |row| row.get::<usize, String>(0))?
+            .query_map(params![repository_id], |row| row.get::<usize, String>(0))?
             .collect();
         let channel_ids = match channel_ids {
             Ok(channel_ids) => channel_ids,
