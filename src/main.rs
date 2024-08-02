@@ -18,6 +18,7 @@ async fn main() {
     for path in PATHS {
         if let Ok(cfg) = Config::open(shellexpand::full(path).unwrap().to_string()) {
             config = Some(cfg);
+            println!("Using config file: {}", path);
             break;
         }
     }

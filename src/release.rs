@@ -2,22 +2,8 @@ use serde::{Deserialize, Serialize};
 
 type Id = u32;
 
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq)]
-pub enum Type {
-    #[serde(rename = "repository")]
-    Repository,
-    #[serde(rename = "channel")]
-    Channel,
-    #[serde(rename = "release")]
-    Release,
-    #[serde(rename = "artifact")]
-    Artifact
-}
-
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Repository {
-    #[serde(rename = "type")]
-    _type: Type,
     id: String,
     channels: Vec<Channel>
 }
@@ -25,7 +11,6 @@ pub struct Repository {
 impl Repository {
     pub fn new(id: String, channels: Vec<Channel>) -> Self {
         Self {
-            _type: Type::Repository,
             id,
             channels
         }
@@ -38,8 +23,6 @@ impl Repository {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Channel {
-    #[serde(rename = "type")]
-    _type: Type,
     id: String,
     releases: Vec<Release>
 }
@@ -47,7 +30,6 @@ pub struct Channel {
 impl Channel {
     pub fn new<S: Into<String>>(id: S, releases: Vec<Release>) -> Self {
         Self {
-            _type: Type::Channel,
             id: id.into(),
             releases
         }
@@ -64,27 +46,24 @@ impl Channel {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Release {
-    #[serde(rename = "type")]
-    _type: Type,
-    id: Id,
+    id: String,
     name: String,
     created_at: u64,
     artifacts: Vec<Artifact>
 }
 
 impl Release {
-    pub fn new<S: Into<String>>(id: Id, name: S, created_at: u64, artifacts: Vec<Artifact>) -> Self {
+    pub fn new<S: Into<String>>(id: S, name: S, created_at: u64, artifacts: Vec<Artifact>) -> Self {
         Self {
-            _type: Type::Release,
-            id,
+            id: id.into(),
             name: name.into(),
             created_at,
             artifacts
         }
     }
 
-    pub fn id(&self) -> Id {
-        self.id
+    pub fn id(&self) -> &str {
+        &self.id
     }
 
     pub fn name(&self) -> &str {
@@ -102,8 +81,6 @@ impl Release {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Artifact {
-    #[serde(rename = "type")]
-    _type: Type,
     id: Id,
     name: String,
     path: String,
@@ -113,7 +90,6 @@ pub struct Artifact {
 impl Artifact {
     pub fn new<S: Into<String>>(id: Id, name: S, path: S, artifact_type: ArtifactType) -> Self {
         Self {
-            _type: Type::Artifact,
             id,
             name: name.into(),
             path: path.into(),
@@ -143,7 +119,8 @@ pub enum ArtifactType {
     ClientJar,
     ServerJar,
     Manifest,
-    MmcInstance
+    MmcInstance,
+    Other
 }
 
 impl Into<u32> for ArtifactType {
@@ -152,7 +129,8 @@ impl Into<u32> for ArtifactType {
             Self::ClientJar => 0,
             Self::ServerJar => 1,
             Self::Manifest => 2,
-            Self::MmcInstance => 3
+            Self::MmcInstance => 3,
+            Self::Other => 4
         }
     }
 }
@@ -166,6 +144,7 @@ impl TryFrom<u32> for ArtifactType {
             1 => Ok(Self::ServerJar),
             2 => Ok(Self::Manifest),
             3 => Ok(Self::MmcInstance),
+            4 => Ok(Self::Other),
             _ => Err(())
         }
     }

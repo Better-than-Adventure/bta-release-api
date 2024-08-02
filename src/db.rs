@@ -71,12 +71,13 @@ impl ReleaseDatabase {
         )?;
         connection.execute(
             "CREATE TABLE IF NOT EXISTS release (
-                id          INTEGER NOT NULL,
+                id          TEXT NOT NULL,
                 repository  TEXT NOT NULL,
                 channel     TEXT NOT NULL,
                 name        TEXT NOT NULL,
                 created_at  INTEGER NOT NULL,
-                CONSTRAINT key PRIMARY KEY (id, channel),
+                CONSTRAINT key PRIMARY KEY (id, repository, channel),
+                FOREIGN KEY(repository) REFERENCES repository(id),
                 FOREIGN KEY(channel) REFERENCES channel(id)
             )",
             ()
@@ -90,7 +91,9 @@ impl ReleaseDatabase {
                 name        TEXT NOT NULL,
                 path        TEXT NOT NULL,
                 type        INTEGER NOT NULL,
-                CONSTRAINT key PRIMARY KEY (id, release),
+                CONSTRAINT key PRIMARY KEY (id, repository, channel, release),
+                FOREIGN KEY(repository) REFERENCES repository(id),
+                FOREIGN KEY(channel) REFERENCES channel(id),
                 FOREIGN KEY(release) REFERENCES release(id)
             )",
             ()
@@ -99,25 +102,12 @@ impl ReleaseDatabase {
         Ok(())
     }
 
-    pub fn read_artifact(&self, repository_id: String, channel_id: String, release_id: u32, artifact_id: u32) -> Result<Artifact> {
-        let mut statement = self.connection.prepare(
-            format!(
-                "SELECT art.id, art.name, art.path, art.type
-                FROM artifact AS art
-                INNER JOIN release AS rel ON rel.id=art.release
-                INNER JOIN channel AS cha ON cha.id=art.channel
-                INNER JOIN repository AS rep ON rep.id=art.repository
-                WHERE art.id={artifact_id}").as_str()
-        )?;
+    pub fn read_artifact<S: Into<String>>(&self, repository_id: S, channel_id: S, release_id: S, artifact_id: u32) -> Result<Artifact> {
+        let repository_id: String = repository_id.into();
+        let channel_id: String = channel_id.into();
+        let release_id: String = release_id.into();
 
-        let db_artifact = statement.query_row([], |row| {
-            Ok(DbArtifact {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                path: row.get(2)?,
-                artifact_type: row.get(3)?
-            })
-        })?;
+        let db_artifact = DbArtifact::read(&self, &repository_id, &channel_id, &release_id, artifact_id)?;
 
         match db_artifact.try_into_artifact() {
             Ok(artifact) => Ok(artifact),
@@ -125,23 +115,12 @@ impl ReleaseDatabase {
         }
     }
 
-    pub fn read_release(&self, repository_id: String, channel_id: String, release_id: u32) -> Result<Release> {
-        let mut statement = self.connection.prepare(
-            format!(
-                "SELECT rel.id, rel.name, rel.created_at
-                FROM release AS rel
-                INNER JOIN channel AS cha ON cha.id=rel.channel
-                INNER JOIN repository AS rep ON rep.id=rel.repository
-                WHERE rel.id={release_id}").as_str()
-        )?;
+    pub fn read_release<S: Into<String>>(&self, repository_id: S, channel_id: S, release_id: S) -> Result<Release> {
+        let repository_id: String = repository_id.into();
+        let channel_id: String = channel_id.into();
+        let release_id: String = release_id.into();
 
-        let db_release = statement.query_row([], |row| {
-            Ok(DbRelease {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                created_at: row.get(2)?
-            })
-        })?;
+        let db_release = DbRelease::read(&self, &repository_id, &channel_id, &release_id)?;
 
         let mut artifact_statement = self.connection.prepare(
             format!("SELECT id FROM artifact WHERE release={release_id}").as_str()
@@ -160,7 +139,7 @@ impl ReleaseDatabase {
 
         let artifacts: std::result::Result<Vec<_>, _> = artifact_ids
             .into_iter()
-            .map(|id| self.read_artifact(repository_id.to_string(), channel_id.to_string(), release_id, id))
+            .map(|id| self.read_artifact(&repository_id, &channel_id, &release_id, id))
             .collect();
         let artifacts = match artifacts {
             Ok(artifacts) => artifacts,
@@ -176,27 +155,18 @@ impl ReleaseDatabase {
         }
     }
 
-    pub fn read_channel(&self, repository_id: String, channel_id: String) -> Result<Channel> {
-        let mut statement = self.connection.prepare(
-            format!(
-                "SELECT cha.id 
-                FROM channel AS cha
-                INNER JOIN repository AS rep ON rep.id=cha.repository
-                WHERE cha.id=\"{channel_id}\"").as_str()
-        )?;
+    pub fn read_channel<S: Into<String>>(&self, repository_id: S, channel_id: S) -> Result<Channel> {
+        let repository_id: String = repository_id.into();
+        let channel_id: String = channel_id.into();
 
-        let db_channel = statement.query_row([], |row| {
-            Ok(DbChannel {
-                id: row.get(0)?
-            })
-        })?;
+        let db_channel = DbChannel::read(&self, &repository_id, &channel_id)?;
 
         let mut release_statement = self.connection.prepare(
             format!("SELECT id FROM release WHERE channel=\"{channel_id}\"").as_str()
         )?;
 
         let release_ids: std::result::Result<Vec<_>, _> = release_statement
-            .query_map([], |row| row.get::<usize, u32>(0))?
+            .query_map([], |row| row.get::<usize, String>(0))?
             .collect();
         let release_ids = match release_ids {
             Ok(release_ids) => release_ids,
@@ -224,16 +194,10 @@ impl ReleaseDatabase {
         }
     }
 
-    pub fn read_repository(&self, repository_id: String) -> Result<Repository> {
-        let mut statement = self.connection.prepare(
-            format!("SELECT id FROM repository WHERE id=\"{repository_id}\"").as_str()
-        )?;
+    pub fn read_repository<S: Into<String>>(&self, repository_id: S) -> Result<Repository> {
+        let repository_id: String = repository_id.into();
 
-        let db_repository = statement.query_row([], |row| {
-            Ok(DbRepository {
-                id: row.get(0)?
-            })
-        })?;
+        let db_repository = DbRepository::read(&self, &repository_id)?;
 
         let mut channel_statement = self.connection.prepare(
             format!("select id FROM channel WHERE repository=\"{repository_id}\"").as_str()
@@ -274,6 +238,25 @@ struct DbRepository {
 }
 
 impl DbRepository {
+    fn read<S: Into<String>>(db: &ReleaseDatabase, repository_id: S) -> Result<DbRepository> {
+        let mut statement = db.connection.prepare(
+            format!(
+                "SELECT id FROM repository
+                WHERE
+                    id=\"{}\"",
+                repository_id.into()
+            ).as_str()
+        )?;
+
+        let db_repository = statement.query_row([], |row| {
+            Ok(DbRepository {
+                id: row.get(0)?
+            })
+        })?;
+
+        Ok(db_repository)
+    }
+
     fn try_into_repository(self, channels: Vec<Channel>) -> std::result::Result<Repository, ()> {
         Ok(Repository::new(self.id, channels))
     }
@@ -284,18 +267,65 @@ struct DbChannel {
 }
 
 impl DbChannel {
+    fn read<S: Into<String>>(db: &ReleaseDatabase, repository_id: S, channel_id: S) -> Result<DbChannel> {
+        let mut statement = db.connection.prepare(
+            format!(
+                "SELECT cha.id 
+                FROM channel AS cha
+                INNER JOIN repository AS rep ON rep.id=cha.repository
+                WHERE
+                    cha.id=\"{}\" AND
+                    cha.repository=\"{}\"",
+                channel_id.into(), repository_id.into()
+            ).as_str()
+        )?;
+
+        let db_channel = statement.query_row([], |row| {
+            Ok(DbChannel {
+                id: row.get(0)?
+            })
+        })?;
+
+        Ok(db_channel)
+    }
+
     fn try_into_channel(self, releases: Vec<Release>) -> std::result::Result<Channel, ()> {
         Ok(Channel::new(self.id, releases))
     }
 }
 
 struct DbRelease {
-    id: u32,
+    id: String,
     name: String,
     created_at: u64
 }
 
 impl DbRelease {
+    fn read<S: Into<String>>(db: &ReleaseDatabase, repository_id: S, channel_id: S, release_id: S) -> Result<DbRelease> {
+        let mut statement = db.connection.prepare(
+            format!(
+                "SELECT rel.id, rel.name, rel.created_at
+                FROM release AS rel
+                INNER JOIN channel AS cha ON cha.id=rel.channel
+                INNER JOIN repository AS rep ON rep.id=rel.repository
+                WHERE
+                    rel.id=\"{}\" AND
+                    rel.repository=\"{}\" AND
+                    rel.channel=\"{}\"",
+            release_id.into(), repository_id.into(), channel_id.into()).as_str()
+        )?;
+
+        let db_release = statement.query_row([], |row| {
+            Ok(DbRelease {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                created_at: row.get(2)?
+            })
+        })?;
+
+        Ok(db_release)
+    }
+
     fn try_into_release(self, artifacts: Vec<Artifact>) -> std::result::Result<Release, ()> {
         Ok(Release::new(self.id, self.name, self.created_at, artifacts))
     }
@@ -308,7 +338,35 @@ struct DbArtifact {
     artifact_type: u32
 }
 
-impl  DbArtifact {
+impl DbArtifact {
+    fn read<S: Into<String>>(db: &ReleaseDatabase, repository_id: S, channel_id: S, release_id: S, artifact_id: u32) -> Result<DbArtifact> {
+        let mut statement = db.connection.prepare(
+            format!(
+                "SELECT art.id, art.name, art.path, art.type
+                FROM artifact AS art
+                INNER JOIN release AS rel ON rel.id=art.release
+                INNER JOIN channel AS cha ON cha.id=art.channel
+                INNER JOIN repository AS rep ON rep.id=art.repository
+                WHERE
+                    art.id={artifact_id} AND
+                    art.repository=\"{}\" AND
+                    art.channel=\"{}\" AND
+                    art.release=\"{}\"",
+            repository_id.into(), channel_id.into(), release_id.into()).as_str()
+        )?;
+
+        let db_artifact = statement.query_row([], |row| {
+            Ok(DbArtifact {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                path: row.get(2)?,
+                artifact_type: row.get(3)?
+            })
+        })?;
+
+        Ok(db_artifact)
+    }
+
     fn try_into_artifact(self) -> std::result::Result<Artifact, ()> {
         if let Ok(artifact_type) = ArtifactType::try_from(self.artifact_type) {
             Ok(Artifact::new(self.id, self.name, self.path, artifact_type))

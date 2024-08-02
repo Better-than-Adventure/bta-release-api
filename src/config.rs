@@ -11,7 +11,11 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        Self { bind_addr: ([0, 0, 0, 0], 3000).into(), db_path: shellexpand::full("./releases.db3").unwrap().to_string().into(), log_level: "WARN".to_string() }
+        Self { 
+            bind_addr: ([0, 0, 0, 0], 3000).into(),
+            db_path: shellexpand::full("./releases.db3").unwrap().to_string().into(),
+            log_level: "WARN".to_string()
+        }
     }
 }
 
